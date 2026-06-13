@@ -7,60 +7,30 @@ import anthropic
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
 claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-SYSTEM_PROMPT = (
-    "あなたは転職エージェントの寺尾美里（フューチャーリンク株式会社）として、候補者へ初回面談の日程調整メールを書きます。\n\n"
-    "【キャラクター】\n"
-    "- IT・ネット業界のマネージャー層以上を専門とする転職エージェント\n"
-    "- 温かみがあり、距離感を縮める言い回しを使う\n"
-    "- 丁寧だが堅苦しくない、誠実でフラットな敬語\n\n"
-    "【文章ルール】\n"
-    "- AIっぽい表現は避ける\n"
-    "- 稀有・証左・感銘・確認は使用禁止\n"
-    "- 太字・記号は使わない\n"
-    "- NAME様のこれまでの歩みを拝見いたしましたという定型句は禁止\n\n"
-    "【構成】\n"
-    "1. 宛名\n"
-    "2. 株式会社フューチャーリンクの寺尾です。返信へのお礼\n"
-    "3. スカウト理由（レジュメから具体的に）＋是非お会いしたい！！と思いを込めてスカウトをさせていただいたので、ご返信いただけてとても嬉しいです！は必須\n"
-    "4. 返信への応答（ある場合）\n"
-    "5. 面談でお聞きしたいこと\n"
-    "6. フラットな情報交換の場であること\n"
-    "7. URL：https://app.spirinc.com/t/InyWmdvIrhOuv-hw7uFwP/as/f-GFwOt7-Vfv484_rVcgQ/confirm\n"
-    "8. 30分〜45分程度\n"
-    "9. 締め\n"
-    "10. 署名：フューチャーリンク 寺尾"
-)
+SYSTEM_PROMPT = "あなたは転職エージェントの寺尾美里（フューチャーリンク株式会社）として、候補者へ初回面談の日程調整メールを書きます。温かみがあり距離感を縮める言い回しを使い、丁寧だが堅苦しくない誠実でフラットな敬語を使います。AIっぽい表現は避け、稀有・証左・感銘・確信は使用禁止。太字・記号は使わない。以下の構成で書いてください。1.宛名 2.株式会社フューチャーリンクの寺尾です。返信へのお礼 3.スカウト理由（レジュメから具体的に）＋是非お会いしたい！！と思いを込めてスカウトをさせていただいたので、ご返信いただけてとても嬉しいです！は必須 4.返信への応答（ある場合） 5.面談でお聞きしたいこと 6.フラットな情報交換の場であること 7.URL: https://app.spirinc.com/t/InyWmdvIrhOuv-hw7uFwP/as/f-GFwOt7-Vfv484_rVcgQ/confirm 8.30分から45分程度 9.締め 10.署名:フューチャーリンク 寺尾"
 
-USAGE_GUIDE = (
-    "*使い方*\n"
-    "以下の形式で送ってください：\n\n"
-    "【候補者名】山田 太郎\n\n"
-    "【レジュメ】\n"
-    "（レジュメを貼り付け）\n\n"
-    "【返信文】\n"
-    "（返信を貼り付け。なければ「なし」）"
-)
+USAGE_GUIDE = "*使い方*\n以下の形式で送ってください\n\n【候補者名】山田 太郎\n\n【レジュメ】\n（レジュメを貼り付け）\n\n【返信文】\n（返信を貼り付け。なければ「なし」）"
 
 
 def parse_message(text):
-    name_match = re.search(r'【候補者名】\s*(.+)', text)
-    resume_match = re.search(r'【レジュメ】\s*([\s\S]+?)(?=【返信文】|$)', text)
-    reply_match = re.search(r'【返信文】\s*([\s\S]+?)$', text)
+    name_match = re.search(r'[\u300c\u300e\u3010]候補者名[\u300d\u300f\u3011]\s*(.+)', text)
+    if not name_match:
+        name_match = re.search(r'\u3010候補者名\u3011\s*(.+)', text)
+    resume_match = re.search(r'\u3010レジュメ\u3011\s*([\s\S]+?)(?=\u3010返信文\u3011|$)', text)
+    reply_match = re.search(r'\u3010返信文\u3011\s*([\s\S]+?)$', text)
     name = name_match.group(1).strip() if name_match else None
     resume = resume_match.group(1).strip() if resume_match else None
     reply = reply_match.group(1).strip() if reply_match else ""
-    if reply.lower() in ["なし", "none", ""]:
+    if not reply or reply.lower() in ["nashi", "none"]:
+        reply = ""
+    if reply == "\u306a\u3057":
         reply = ""
     return name, resume, reply
 
 
 def generate_mail(name, resume, reply):
-    user_prompt = (
-        "候補者名：" + name + "\n\n"
-        "【レジュメ】\n" + resume + "\n\n"
-        "【返信文】\n" + (reply if reply else "（返信なし）") + "\n\n"
-        "初回面談日程調整メールを作成してください。"
-    )
+    reply_text = reply if reply else "(返信なし)"
+    user_prompt = "候補者名: " + name + "\n\nレジュメ\n" + resume + "\n\n返信文\n" + reply_text + "\n\n初回面談日程調整メールを作成してください。"
     response = claude.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1000,
